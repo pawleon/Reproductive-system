@@ -122,9 +122,16 @@ function statusTemplate(s, p) {
     const fields = c => c.isPregnant && pregnancyIsKnown(c, s)
         ? { mood: '...', symptoms: '...', fetus_count: c.fetusCount || 1, fetus_size: '...', note: '...' }
         : { libido: '...', mood: '...', physical: '...', note: '...' };
-    const status = isTracked('user') && !p.hasBaby ? fields(p) : { note: '...' };
-    status.subject = 'user';
-    if (isTracked('char')) status.partner = { subject: 'char', ...fields(getPartnerData()) };
+
+    // Keep actor ownership explicit so {{user}} and {{char}} status fields
+    // cannot be mistaken for one another by the model or the parser.
+    const status = {};
+    if (isTracked('user') && !p.hasBaby) {
+        status.user = { subject: 'user', ...fields(p) };
+    }
+    if (isTracked('char')) {
+        status.partner = { subject: 'char', ...fields(getPartnerData()) };
+    }
     if (p.hasBaby) status.babies = p.babies.map((c, i) => ({
         label: c.name || `Baby${i + 1}`, mood: '...', sleep: '...', feeding: '...', diaper: '...', care_note: '...', milestone: null
     }));
@@ -167,7 +174,9 @@ export function getBasePrompt() {
 
     const { langName, line } = langRequirement();
     const status = statusTemplate(s, p);
-    b += `End with exactly one hidden status tag. Values: ${langName}, short, current-scene only; omit unknown fields.\n<!-- [RP_STATUS:${JSON.stringify(status)}] -->\n`;
+    b += `End with exactly one hidden status tag. Values: ${langName}, short, current-scene only; omit unknown fields.\n`;
+    b += "RP_STATUS ownership is strict: user = {{user}} only; partner = {{char}} only. Never put {{char}}'s libido, mood, physical state, symptoms, pregnancy state, or sexual state inside user. Never put {{user}}'s state inside partner.\n";
+    b += `<!-- [RP_STATUS:${JSON.stringify(status)}] -->\n`;
     b += line + '\n';
     if (p.hasBaby) b += 'Keep existing baby labels unchanged; milestone only for a new first achievement in this scene.\n';
     b += 'End with current RP time: <!-- [RP_DATE:DD.MM.YYYY HH:MM] -->. Event tags belong only in the final reply and must reflect completed/current-scene events.\n';

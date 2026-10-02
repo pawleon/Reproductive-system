@@ -583,7 +583,11 @@ function buildPregnancyCard(who, p, root, s, tr) {
 // Internal implementation note.
 function cycleCardHtml(who, c, tr) {
     const s = getSettings();
-    const d = c._dynamic || {};
+    // Dynamic cycle status is accepted only when the parser marked its owner.
+    // This also makes stale legacy/misassigned dynamic values fall back to the
+    // deterministic cycle values instead of leaking {{char}} into {{user}}.
+    const rawDynamic = c._dynamic || {};
+    const d = rawDynamic._owner === who ? rawDynamic : {};
 
 
     // Internal implementation note.

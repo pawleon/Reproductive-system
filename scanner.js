@@ -657,31 +657,76 @@ export async function scanFullHistory() {
             const statusData = scanStatusTag(text);
             if (statusData) {
                 const p2 = getPregnancyData();
+                // New status schema: user is explicit, partner remains the
+                // character/second-carrier branch. Legacy root-level status
+                // is still accepted so old messages remain reconstructable.
+                const userStatus = statusData.user && typeof statusData.user === 'object'
+                    ? statusData.user
+                    : statusData;
+                const partnerStatus = statusData.partner && typeof statusData.partner === 'object'
+                    ? statusData.partner
+                    : statusData.char && typeof statusData.char === 'object'
+                        ? statusData.char
+                        : null;
+
                 if (p2.hasBaby) {
-                    p2._dynamic = { note: statusData.note || null };
+                    p2._dynamic = { note: userStatus.note || null, _owner: 'user' };
                 } else if (p2.isPregnant) {
                     p2._dynamic = {
-                        symptoms: statusData.symptoms || null,
-                        recommendations: statusData.recommendations || null,
-                        movements: statusData.movements || null,
-                        swelling: statusData.swelling || null,
-                        braxton_hicks: statusData.braxton_hicks || null,
-                        fetal_position: statusData.fetal_position || null,
-                        note: statusData.note || null,
+                        symptoms: userStatus.symptoms || null,
+                        recommendations: userStatus.recommendations || null,
+                        movements: userStatus.movements || null,
+                        swelling: userStatus.swelling || null,
+                        braxton_hicks: userStatus.braxton_hicks || null,
+                        fetal_position: userStatus.fetal_position || null,
+                        note: userStatus.note || null,
+                        _owner: 'user',
                     };
-                    if (statusData.mood) p2.mood = statusData.mood;
-                    if (statusData.libido) p2.libido = statusData.libido;
-                    if (statusData.weight_gain) p2.weightGain = statusData.weight_gain;
-                    if (statusData.baby_activity) p2.babyActivity = statusData.baby_activity;
-                    if (statusData.father_name) p2.fatherName = String(statusData.father_name).slice(0, 80);
+                    if (userStatus.mood) p2.mood = userStatus.mood;
+                    if (userStatus.libido) p2.libido = userStatus.libido;
+                    if (userStatus.weight_gain) p2.weightGain = userStatus.weight_gain;
+                    if (userStatus.baby_activity) p2.babyActivity = userStatus.baby_activity;
+                    if (userStatus.father_name) p2.fatherName = String(userStatus.father_name).slice(0, 80);
                 } else {
                     p2._dynamic = {
-                        fertility: statusData.fertility || null,
-                        libido: statusData.libido || null,
-                        mood: statusData.mood || null,
-                        physical: statusData.physical || null,
-                        note: statusData.note || null,
+                        fertility: userStatus.fertility || null,
+                        libido: userStatus.libido || null,
+                        mood: userStatus.mood || null,
+                        physical: userStatus.physical || null,
+                        note: userStatus.note || null,
+                        _owner: 'user',
                     };
+                }
+
+                if (partnerStatus && isTrackedForScan(s, 'char')) {
+                    const c2 = getPartnerData();
+                    if (c2.isPregnant) {
+                        c2._dynamic = {
+                            symptoms: partnerStatus.symptoms || null,
+                            recommendations: partnerStatus.recommendations || null,
+                            movements: partnerStatus.movements || null,
+                            swelling: partnerStatus.swelling || null,
+                            braxton_hicks: partnerStatus.braxton_hicks || null,
+                            fetal_position: partnerStatus.fetal_position || null,
+                            fetusSize: partnerStatus.fetus_size || null,
+                            note: partnerStatus.note || null,
+                            _owner: 'char',
+                        };
+                        if (partnerStatus.mood) c2.mood = partnerStatus.mood;
+                        if (partnerStatus.libido) c2.libido = partnerStatus.libido;
+                        if (partnerStatus.weight_gain) c2.weightGain = partnerStatus.weight_gain;
+                        if (partnerStatus.baby_activity) c2.babyActivity = partnerStatus.baby_activity;
+                        if (partnerStatus.father_name) c2.fatherName = String(partnerStatus.father_name).slice(0, 80);
+                    } else {
+                        c2._dynamic = {
+                            fertility: partnerStatus.fertility || null,
+                            libido: partnerStatus.libido || null,
+                            mood: partnerStatus.mood || null,
+                            physical: partnerStatus.physical || null,
+                            note: partnerStatus.note || null,
+                            _owner: 'char',
+                        };
+                    }
                 }
             }
 

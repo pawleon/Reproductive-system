@@ -473,10 +473,20 @@ export function rescanStatusOnly(fullText) {
 
 // ─── Apply RP_STATUS JSON data to pregnancy state ───
 function applyStatusData(s, p, data) {
-    if (data.subject && data.subject !== 'user') return;
-    if (data.partner?.subject && data.partner.subject !== 'char') {
-        data = { ...data, partner: undefined };
-    }
+    if (!data || typeof data !== 'object') return;
+
+    // New schema keeps {{user}} and {{char}} in explicit containers.
+    // Legacy root-level status remains accepted for old chat messages.
+    const userData = data.user && typeof data.user === 'object' ? data.user : data;
+    let partnerData = data.partner && typeof data.partner === 'object'
+        ? data.partner
+        : data.char && typeof data.char === 'object'
+            ? data.char
+            : null;
+
+    if (userData.subject && userData.subject !== 'user') return;
+    if (partnerData?.subject && partnerData.subject !== 'char') partnerData = null;
+
     const applyLooks = (carrier, looks) => {
         if (!looks || typeof looks !== 'object') return;
         carrier.motherLooks ||= {};
@@ -484,8 +494,8 @@ function applyStatusData(s, p, data) {
             if (typeof looks[key] === 'string' && looks[key].trim()) carrier.motherLooks[key] = looks[key].trim().slice(0,80);
         }
     };
-    if (isTracked('user')) applyLooks(p, data.looks);
-    if (isTracked('char')) applyLooks(getPartnerData(), data.partner?.looks);
+    if (isTracked('user')) applyLooks(p, userData.looks);
+    if (isTracked('char')) applyLooks(getPartnerData(), partnerData?.looks);
     const applyKnowledge = (c, fact) => {
         if (!c.isPregnant || !fact || typeof fact !== 'object') return;
         if (fact.pregnancy_known === true) c.pregnancyKnown = true;
@@ -500,13 +510,13 @@ function applyStatusData(s, p, data) {
             if (fact.test_result !== 'negative') c.pregnancyKnown = true;
         }
     };
-    if (isTracked('user')) applyKnowledge(p, data);
-    if (isTracked('char')) applyKnowledge(getPartnerData(), data.partner);
+    if (isTracked('user')) applyKnowledge(p, userData);
+    if (isTracked('char')) applyKnowledge(getPartnerData(), partnerData);
 
     // Internal implementation note.
     // Internal implementation note.
-    if (s.realism && typeof data.cycle_event === 'string' && !p.isPregnant) {
-        const kind = data.cycle_event.trim().toLowerCase();
+    if (s.realism && typeof userData.cycle_event === 'string' && !p.isPregnant) {
+        const kind = userData.cycle_event.trim().toLowerCase();
         if (DISRUPTIONS[kind] && !p._cycleShift) {
             const days = disruptionShift(kind);
             if (days > 0) {
@@ -620,20 +630,20 @@ function applyStatusData(s, p, data) {
                 }
             });
         }
-        p._dynamic = { note: data.note || null };
+        p._dynamic = { note: userData.note || null, _owner: 'user' };
 
     } else if (p.isPregnant) {
         // Pregnancy mode
-        if (data.mood) p.mood = data.mood;
-        if (data.libido) p.libido = data.libido;
-        if (data.weight_gain) p.weightGain = data.weight_gain;
-        if (data.baby_activity) p.babyActivity = data.baby_activity;
-        if (!p._secondParentManual && data.father_name && data.father_name !== p.fatherName) {
-            p.fatherName = String(data.father_name).slice(0, 80);
+        if (userData.mood) p.mood = userData.mood;
+        if (userData.libido) p.libido = userData.libido;
+        if (userData.weight_gain) p.weightGain = userData.weight_gain;
+        if (userData.baby_activity) p.babyActivity = userData.baby_activity;
+        if (!p._secondParentManual && userData.father_name && userData.father_name !== p.fatherName) {
+            p.fatherName = String(userData.father_name).slice(0, 80);
         }
 
         // Sex reveal from RP_STATUS (in case model puts it here instead of tag)
-        if (data.sex_revealed === true && !p.fetusSexRevealed) {
+        if (userData.sex_revealed === true && !p.fetusSexRevealed) {
             p.fetusSexRevealed = true;
             if (s.showNotifications) {
                 const icons = p.fetusSex.map(sx => sx === 'M' ? '♂ boy' : '♀ girl').join(', ');
@@ -642,33 +652,35 @@ function applyStatusData(s, p, data) {
         }
 
         p._dynamic = {
-            symptoms: data.symptoms || null,
-            recommendations: data.recommendations || null,
-            movements: data.movements || null,
-            swelling: data.swelling || null,
-            braxton_hicks: data.braxton_hicks || null,
-            fetal_position: data.fetal_position || null,
+            symptoms: userData.symptoms || null,
+            recommendations: userData.recommendations || null,
+            movements: userData.movements || null,
+            swelling: userData.swelling || null,
+            braxton_hicks: userData.braxton_hicks || null,
+            fetal_position: userData.fetal_position || null,
             // Internal implementation note.
             // Internal implementation note.
-            fetusSize: data.fetus_size || null,
-            note: data.note || null,
+            fetusSize: userData.fetus_size || null,
+            note: userData.note || null,
+            _owner: 'user',
         };
 
     } else {
         // Cycle mode
         p._dynamic = {
-            fertility: data.fertility || null,
-            libido: data.libido || null,
-            mood: data.mood || null,
-            physical: data.physical || null,
-            note: data.note || null,
+            fertility: userData.fertility || null,
+            libido: userData.libido || null,
+            mood: userData.mood || null,
+            physical: userData.physical || null,
+            note: userData.note || null,
+            _owner: 'user',
         };
     }
 
     // Internal implementation note.
-    if (data.partner && typeof data.partner === 'object' && isTracked('char')) {
+    if (partnerData && isTracked('char')) {
         const c = getPartnerData();
-        const d2 = data.partner;
+        const d2 = partnerData;
         if (d2.mood) c.mood = d2.mood;
         if (d2.libido) c.libido = d2.libido;
         if (d2.weight_gain) c.weightGain = d2.weight_gain;
@@ -681,12 +693,14 @@ function applyStatusData(s, p, data) {
             movements: d2.movements || null,
             fetusSize: d2.fetus_size || null,
             note: d2.note || null,
+            _owner: 'char',
         } : {
             fertility: d2.fertility || null,
             libido: d2.libido || null,
             mood: d2.mood || null,
             physical: d2.physical || null,
             note: d2.note || null,
+            _owner: 'char',
         };
     }
 }
